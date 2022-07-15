@@ -656,6 +656,7 @@ class GaussianDiffusion:
         cond_fn=None,
         model_kwargs=None,
         eta=0.0,
+        saved_init_image=None,
     ):
         """
         Sample x_{t-1} from the model using DDIM.
@@ -670,6 +671,13 @@ class GaussianDiffusion:
             denoised_fn=denoised_fn,
             model_kwargs=model_kwargs,
         )
+
+        if (not saved_init_image == None):
+            saved_init_image_mask = saved_init_image.mul(255).clamp(0, 1)
+            converted_sample = out_orig["pred_xstart"].add(1).div(2).clamp(0, 1)
+            masked_sample = converted_sample * saved_init_image_mask
+            out_orig["pred_xstart"] = ((converted_sample + saved_init_image) - masked_sample).mul(2).sub(1)
+
         if cond_fn is not None:
             out = self.condition_score(cond_fn, out_orig, x, t, model_kwargs=model_kwargs)
         else:
@@ -708,6 +716,7 @@ class GaussianDiffusion:
         cond_fn=None,
         model_kwargs=None,
         eta=0.0,
+        saved_init_image=None,
     ):
         """
         Sample x_{t-1} from the model using DDIM.
@@ -849,6 +858,7 @@ class GaussianDiffusion:
         eta=0.0,
         skip_timesteps=0,
         init_image=None,
+        init_image_mask=None,
         randomize_class=False,
         cond_fn_with_grad=False,
         transformation_fn=None,
@@ -873,6 +883,11 @@ class GaussianDiffusion:
 
         indices = list(range(self.num_timesteps - skip_timesteps))[::-1]
         transformation_steps = [int(len(indices)*(1-i)) for i in transformation_percent]
+        print('indices - %i transformation_steps - %i' % (len(indices) , len(transformation_steps)))
+
+        saved_init_image = None
+        if (not init_image_mask == None):
+            saved_init_image = init_image_mask.add(1).div(2).clamp(0, 1)
 
         if init_image is not None:
             my_t = th.ones([shape[0]], device=device, dtype=th.long) * indices[0]
@@ -903,8 +918,11 @@ class GaussianDiffusion:
                     cond_fn=cond_fn,
                     model_kwargs=model_kwargs,
                     eta=eta,
+                    saved_init_image=saved_init_image,
                 )
+
                 yield out
+
                 img = out["sample"]
 
     def plms_sample(
